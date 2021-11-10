@@ -6,4 +6,4 @@ print("ben was here in lowercase")
 "lol"
 'sebas was here'
 print("Parsa was here")
-print('shui was here')
+print('shui was here.')
