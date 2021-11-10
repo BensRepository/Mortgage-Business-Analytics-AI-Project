@@ -2,6 +2,8 @@ print("test")
 #comment for test
 print("BEN WAS HERE")
 print("ben was here in lowercase")
-print("shui was here")
-
-
+'test'
+"lol"
+'sebas was here'
+print("Parsa was here")
+print('shui was here')
