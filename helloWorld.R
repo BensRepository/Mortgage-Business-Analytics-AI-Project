@@ -50,7 +50,8 @@ MYLIBRARIES<-c("outliers",
                "pROC",
                "formattable",
                "stats",
-               "PerformanceAnalytics")
+               "PerformanceAnalytics",
+               "openxlsx")
 
 
 
@@ -66,7 +67,7 @@ MYLIBRARIES<-c("outliers",
 #   b. determine if any ORDINAL fields are outliers
 #      replace outlier value with mean of the field
 #   c. transform dataset using z-scale
-#   d. ensure dataset is scaled to values classifer requires
+#   d. ensure dataset is scaled to values classifer requires [0.0, 1.0]
 #
 # SYMBOLIC:
 #   a. transform using 1-hot-encoding (its own field, with values {0,1})
@@ -114,6 +115,8 @@ main<-function(){
   #   column for ORDINAL or DISCRETE 
   #   create csv file with all the categories DONE
   NPREPROCESSING_presentDataset(dataset)
+  
+  fieldTypes = NPREPROCESSING_fieldTypes(dataset, 10, 5)
   
   print("END of MAIN")
   

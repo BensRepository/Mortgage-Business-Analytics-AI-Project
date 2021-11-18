@@ -84,7 +84,7 @@ NPREPROCESSING_presentDataset<-function(dataset){
   tidyTable<-data.frame(Field=names(dataset),
                         SYMBOLIC=FALSE,
                         Categories=0,
-                        Name=0,
+                        HighestPercentage=0,
                         NUMERIC=FALSE,
                         Min=0.0,
                         Mean=0.0,
@@ -110,13 +110,18 @@ NPREPROCESSING_presentDataset<-function(dataset){
       # Amount of categories in a SYMBOLIC field
       tidyTable$Categories[field] <- length(unique(dataset[,field]))
       
-      # Counts each category in a SYMBOLIC field
+      # Counts each category and calculate the percentage in a SYMBOLIC field
       categoryCount <- sapply(unique(dataset[,field]),function(x) length(which(dataset[,field]==x)))
-      majorityCategoryPC <- round((sort(categoryCount, decreasing = TRUE)[1]/nrow(dataset))*100,digits=0)
-      tidyTable$Name[field] <- paste(names(majorityCategoryPC),"(",majorityCategoryPC,"%)",sep="")
+      categoryPC <- round((categoryCount/nrow(dataset))*100,digits=0)
+      
+      # Stores result in a descending order
+      df <- data.frame(Category=names(categoryCount), Amount=categoryCount, Percentage=categoryPC)
+      df <- df[order(-df$Amount),]
+      
+      # Displays the category with the highest percentage
+      tidyTable$HighestPercentage[field] <- paste(df[1,1],"(",df[1,3],"%)",sep="")
       
       # Saves the result in a Excel file
-      df <- data.frame(Category=names(categoryCount), Amount=categoryCount)
       addWorksheet(wb, names(dataset)[field])
       writeData(wb, names(dataset)[field], df)
     }
@@ -139,4 +144,105 @@ NPREPROCESSING_presentDataset<-function(dataset){
   saveWorkbook(wb, file="CategoryStatistcs.xlsx", overwrite=TRUE)
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ************************************************
+# Nrescale() :
+#
+# These are the real values, that we scale between 0-1
+# i.e. x-min / (max-min)
+#
+# INPUT:   vector - input - values to scale
+#
+# OUTPUT : vector - scaled values to [0.0,1.0]
+# ************************************************
+Nrescale<-function(input){
+  
+  minv<-min(input)
+  maxv<-max(input)
+  return((input-minv)/(maxv-minv))
+}
+
+
+
+
+
+
+# ************************************************
+# NPREPROCESSING_discreetNumeric() :
+#
+# Test NUMERIC field if DISCREET or ORDINAL
+#
+# INPUT: data frame      - dataset     - input data
+#        int             - cutoff      - Number of empty bins needed to determine discreet (1-10)
+#        int             - binsize     - Number of bins in histogram
+#
+# OUTPUT : vector strings - Types per field {DISCREET, ORDINAL, SYMBOLIC}
+# ************************************************
+# Uses histogram
+# Plots histogram for visulisation
+# ************************************************
+NPREPROCESSING_fieldTypes<-function(dataset, binsize, cutoff){
+  
+  fieldTypes <- vector()
+  
+  for(field in 1:(ncol(dataset))){
+    
+    # Filter for only NUMERIC fields
+    if (is.numeric(dataset[,field])) {
+      
+      # Scale the whole field to between 0 and 1
+      scaledColumn<-Nrescale(dataset[,field])
+      
+      # Generate the "cutoff" points of bins
+      # 0-0.1, 0.1-0.2...0.9-1.0 if binsize=10
+      cutpoints<-seq(0,1,length=binsize+1)
+      
+      # Create bin containers
+      bins<-vector()
+      
+      # Sort values into correct bin range
+      for (i in 2:(binsize+1)){
+        rangeBucket <- scaledColumn[(scaledColumn<=cutpoints[i])&(scaledColumn>cutpoints[i-1])]
+        bins<-append(bins,length(rangeBucket))
+      }
+      
+      # % Value of the count (i.e. density)
+      bins<-(bins/length(scaledColumn))*100.0
+      
+      
+      # If number of bins with less than 1%, is greater than cutoff
+      # then field is determined as DISCREET
+      if (length(which(bins<1.0))>cutoff)
+        fieldTypes[field]<-"DISCREET"
+      else
+        fieldTypes[field]<-"ORDINAL"
+      
+      
+      graphTitle<-"Decision based on cutoff value:"
+      
+      # Histogram
+      barplot(bins, main=paste(graphTitle, cutoff, ":", fieldTypes[field]),
+              xlab=names(dataset[field]),
+              names.arg = 1:binsize,bty="n")
+      
+    }else
+    {
+      fieldTypes[field]<-"SYMBOLIC"
+    }
+  } 
+  return(fieldTypes)
+}
 
