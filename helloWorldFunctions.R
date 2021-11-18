@@ -145,19 +145,6 @@ NPREPROCESSING_presentDataset<-function(dataset){
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ************************************************
 # Nrescale() :
 #
@@ -168,16 +155,12 @@ NPREPROCESSING_presentDataset<-function(dataset){
 #
 # OUTPUT : vector - scaled values to [0.0,1.0]
 # ************************************************
-Nrescale<-function(input){
+Nrescale <- function(input){
   
-  minv<-min(input)
-  maxv<-max(input)
+  minv <- min(input)
+  maxv <- max(input)
   return((input-minv)/(maxv-minv))
 }
-
-
-
-
 
 
 # ************************************************
@@ -204,34 +187,34 @@ NPREPROCESSING_fieldTypes<-function(dataset, binsize, cutoff){
     if (is.numeric(dataset[,field])) {
       
       # Scale the whole field to between 0 and 1
-      scaledColumn<-Nrescale(dataset[,field])
+      scaledColumn <- Nrescale(dataset[,field])
       
       # Generate the "cutoff" points of bins
       # 0-0.1, 0.1-0.2...0.9-1.0 if binsize=10
-      cutpoints<-seq(0,1,length=binsize+1)
+      cutpoints <- seq(0,1,length=binsize+1)
       
       # Create bin containers
-      bins<-vector()
+      bins <- vector()
       
       # Sort values into correct bin range
       for (i in 2:(binsize+1)){
         rangeBucket <- scaledColumn[(scaledColumn<=cutpoints[i])&(scaledColumn>cutpoints[i-1])]
-        bins<-append(bins,length(rangeBucket))
+        bins <- append(bins,length(rangeBucket))
       }
       
       # % Value of the count (i.e. density)
-      bins<-(bins/length(scaledColumn))*100.0
+      bins <- (bins/length(scaledColumn))*100.0
       
       
       # If number of bins with less than 1%, is greater than cutoff
       # then field is determined as DISCREET
       if (length(which(bins<1.0))>cutoff)
-        fieldTypes[field]<-"DISCREET"
+        fieldTypes[field] <- TYPE_DISCREET
       else
-        fieldTypes[field]<-"ORDINAL"
+        fieldTypes[field] <- TYPE_ORDINAL
       
       
-      graphTitle<-"Decision based on cutoff value:"
+      graphTitle <- "Decision based on cutoff value:"
       
       # Histogram
       barplot(bins, main=paste(graphTitle, cutoff, ":", fieldTypes[field]),
@@ -240,9 +223,93 @@ NPREPROCESSING_fieldTypes<-function(dataset, binsize, cutoff){
       
     }else
     {
-      fieldTypes[field]<-"SYMBOLIC"
+      fieldTypes[field] <- TYPE_SYMBOLIC
     }
   } 
   return(fieldTypes)
 }
+
+
+
+
+
+
+# ************************************************
+# NPREPROCESSING_categorical() :
+#
+# Transform SYMBOLIC or DISCREET fields using 1-hot-encoding
+#
+# INPUT: data frame    - dataset      - symbolic fields
+#        vector string - fieldTypes  - types per field {ORDINAL, SYMBOLIC, DISCREET}
+#
+# OUTPUT : data frame    - transformed dataset
+# ************************************************
+# Small number of literals only otherwise too many dimensions
+# Uses 1-hot-encoding if more than 2 unique literals in the field
+# Otherwise converts the 2 literals into one field of {0,1}
+# ************************************************
+NPREPROCESSING_categorical<-function(dataset, fieldTypes){
+  
+  # Dataframe of the transformed categorical fields
+  # Create one column and fill with rowcount with NA
+  categorical<-data.frame(first=rep(NA, nrow(dataset)), stringsAsFactors=FALSE)
+  
+  for(field in 1:(ncol(dataset))){
+    
+    # Only for SYMBOLIC or DISCREET fields (NEED TO SOLVE WHAT TO DO WITH DISCREET BUCKETTING)
+    # if ((fieldTypes[field]==TYPE_SYMBOLIC)||(fieldTypes[field]==TYPE_DISCREET)) {
+    if (fieldTypes[field]==TYPE_SYMBOLIC) {
+      
+      # Create a list of unique values in the field (each is a literal)
+      literals <- as.vector(unique(dataset[,field]))
+      numberLiterals <- length(literals)
+      
+      # If just two literals in the field, convert to 0 and 1
+      if (numberLiterals==2){
+        transformed <- ifelse (dataset[,field]==literals[1],0.0,1.0)
+        categorical <- cbind(categorical,transformed)
+        colnames(categorical)[ncol(categorical)] <- colnames(dataset)[field]
+        
+      } else
+      {
+        # 1-hot encoding FOR SMALL NUMBER of literals(set max limit)
+        if (numberLiterals<=MAX_LITERALS){
+          for(num in 1:numberLiterals){
+            nameOfLiteral<-literals[num]
+            hotEncoding<-ifelse (dataset[,field]==nameOfLiteral,1.0,0.0)
+            
+            # Warning - do not convert the field if their are too few literals
+            # Use log of number of recrods as the measure
+            literalsActive<-sum(hotEncoding==1)
+            if (literalsActive>log(length(hotEncoding))) {
+              categorical<-cbind(categorical,hotEncoding)
+              
+              # Field name has the "_" seperator to make easier to read
+              colnames(categorical)[ncol(categorical)]<-paste(colnames(dataset)[field],
+                                                              "_",
+                                                              nameOfLiteral,
+                                                              sep="")
+            }
+            else {
+              print(paste("Ignoring in field:",names(dataset)[field],
+                          "Literal:",nameOfLiteral,
+                          "Too few=",literalsActive))
+            }
+          }
+        } else {
+          stop(paste("Error - too many literals in:",names(dataset)[field], numberLiterals))
+        }
+        
+      }
+    }
+  }
+  
+  # Remove first column full of NA due to creation of empty data frame
+  return(categorical[,-1]) 
+  
+  # write.csv(hello, file="1-hot-encoding-SYMBOLIC.csv")
+}
+
+
+
 
