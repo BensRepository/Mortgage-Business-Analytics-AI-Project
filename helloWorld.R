@@ -50,7 +50,8 @@ MYLIBRARIES<-c("outliers",
                "pROC",
                "formattable",
                "stats",
-               "PerformanceAnalytics")
+               "PerformanceAnalytics",
+               "openxlsx")
 
 
 

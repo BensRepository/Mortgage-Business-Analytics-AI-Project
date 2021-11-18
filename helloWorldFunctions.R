@@ -84,7 +84,7 @@ NPREPROCESSING_presentDataset<-function(dataset){
   tidyTable<-data.frame(Field=names(dataset),
                         SYMBOLIC=FALSE,
                         Categories=0,
-                        Name=0,
+                        HighestPercentage=0,
                         NUMERIC=FALSE,
                         Min=0.0,
                         Mean=0.0,
@@ -110,13 +110,18 @@ NPREPROCESSING_presentDataset<-function(dataset){
       # Amount of categories in a SYMBOLIC field
       tidyTable$Categories[field] <- length(unique(dataset[,field]))
       
-      # Counts each category in a SYMBOLIC field
+      # Counts each category and calculate the percentage in a SYMBOLIC field
       categoryCount <- sapply(unique(dataset[,field]),function(x) length(which(dataset[,field]==x)))
-      majorityCategoryPC <- round((sort(categoryCount, decreasing = TRUE)[1]/nrow(dataset))*100,digits=0)
-      tidyTable$Name[field] <- paste(names(majorityCategoryPC),"(",majorityCategoryPC,"%)",sep="")
+      categoryPC <- round((categoryCount/nrow(dataset))*100,digits=0)
+      
+      # Stores result in a descending order
+      df <- data.frame(Category=names(categoryCount), Amount=categoryCount, Percentage=categoryPC)
+      df <- df[order(-df$Amount),]
+      
+      # Displays the category with the highest percentage
+      tidyTable$HighestPercentage[field] <- paste(df[1,1],"(",df[1,3],"%)",sep="")
       
       # Saves the result in a Excel file
-      df <- data.frame(Category=names(categoryCount), Amount=categoryCount)
       addWorksheet(wb, names(dataset)[field])
       writeData(wb, names(dataset)[field], df)
     }
