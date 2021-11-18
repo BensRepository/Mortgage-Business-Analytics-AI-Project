@@ -21,16 +21,23 @@ rm(list=ls())
 
 # Global Environment variables
 DATASET_FILENAME <- "Washington_State_HDMA-2016.csv"
-
+OUTPUT_FIELD      <- "action_taken_name"
 # 13 = respondent_id (had 753 categories)
 FIELDS_TO_REMOVE <- c(2, 10, 11, 13, 24:26, 29:32, 36, 39:42, 45)
-
+HOLDOUT           <- 70 
 BINSIZE = 10
 CUTOFF = 5
-
+CUTOFF_OUTLIER    <- 0.99                 # Confidence p-value for outlier detection
+# Set to negative means analyse but do not replace outliers
+CUTOFF_DISCREET   <- 5                    # Number of empty bins to determine discreet
+CUTOFF_REDUNDANT  <- 0.95       
+OUTLIER_CONF      <- 0.95
 TYPE_SYMBOLIC <- "SYMBOLIC"
 TYPE_DISCREET <- "DISCREET"
 TYPE_ORDINAL  <- "ORDINAL"
+TYPE_NUMERIC      <- "NUMERIC"            # field is initially a numeric
+TYPE_IGNORE       <- "IGNORE"
+manualTypes <- data.frame()
 
 # Maximum number of 1-hot-coding new fields
 MAX_LITERALS <- 50                 
@@ -135,10 +142,56 @@ main<-function(){
   
   
   # at the moment only for SYMBOLIC
-  catagoricalReadyForML = NPREPROCESSING_categorical(dataset, filedTypes)
+  #ordinals<-dataset[,which(fieldTypes==TYPE_ORDINAL)]
   
+  # Test if any ordinals are outliers and replace with mean values
+  # Null hyposis is there are no outliers
+  # We reject this if the p-value<significance (i.e. 0.05), confidence=95%
   
+  #ordinals<-NPREPROCESSING_outlier(ordinals=ordinals,confidence=OUTLIER_CONF)
+  
+  # ************************************************
+  # z-scale
+  #zscaled<-as.data.frame(scale(ordinals,center=TRUE, scale=TRUE))
+  
+  # In the choosen classifier, the input values need to be scaled to [0.0,1.0]
+  #ordinalReadyforML<-Nrescaleentireframe(zscaled)
+  #catagoricalReadyForML = NPREPROCESSING_categorical(dataset, fieldTypes)
+  #combinedML<-cbind(ordinalReadyforML,catagoricalReadyForML)
+  #combinedML<-NPREPROCESSING_redundantFields(dataset=combinedML,cutoff=0.95)
+  #nonNumericbefore<-length(which(fieldTypes!=TYPE_ORDINAL))
+  
+  # How many fields have be generated through the 1-hot-encoding process
+ # nonNumerictranformed<-ncol(catagoricalReadyForML)
+ # print(paste("Symbolic fields. Before encoding=",nonNumericbefore,"After",nonNumerictranformed))
   # combinedML (join the 2 dataframes)
+  
+  
+  #combinedML<-combinedML[order(runif(nrow(combinedML))),]
+  
+  # Create a TRAINING dataset using first HOLDOUT% of the records
+  # and the remaining 30% is used as TEST
+  # use ALL fields (columns)
+  #training_records<-round(nrow(combinedML)*(HOLDOUT/100))
+  #training_data <- combinedML[1:training_records,]
+  #testing_data = combinedML[-(1:training_records),]
+  
+  # ************************************************
+  
+  #myModelling(training_data = training_data, testing_data = testing_data)
+  
+  dataset<-NPREPROCESSING_dataset(dataset=dataset,
+                                  scaleFlag=TRUE)
+  
+  # Holdout split of the dataset
+  # Randomise the dataset and then split it into train and test
+  splitData<-NPREPROCESSING_splitdataset(dataset)
+  
+  # ************************************************
+  # Experiment with C5 decision tree and preprocessed dataset
+  measures<-fullDT(train=splitData$train, test=splitData$test)
+  
+  
   
   print("END of MAIN")
   
