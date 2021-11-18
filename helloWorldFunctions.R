@@ -145,19 +145,6 @@ NPREPROCESSING_presentDataset<-function(dataset){
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ************************************************
 # Nrescale() :
 #
@@ -168,16 +155,12 @@ NPREPROCESSING_presentDataset<-function(dataset){
 #
 # OUTPUT : vector - scaled values to [0.0,1.0]
 # ************************************************
-Nrescale<-function(input){
+Nrescale <- function(input){
   
-  minv<-min(input)
-  maxv<-max(input)
+  minv <- min(input)
+  maxv <- max(input)
   return((input-minv)/(maxv-minv))
 }
-
-
-
-
 
 
 # ************************************************
@@ -204,34 +187,34 @@ NPREPROCESSING_fieldTypes<-function(dataset, binsize, cutoff){
     if (is.numeric(dataset[,field])) {
       
       # Scale the whole field to between 0 and 1
-      scaledColumn<-Nrescale(dataset[,field])
+      scaledColumn <- Nrescale(dataset[,field])
       
       # Generate the "cutoff" points of bins
       # 0-0.1, 0.1-0.2...0.9-1.0 if binsize=10
-      cutpoints<-seq(0,1,length=binsize+1)
+      cutpoints <- seq(0,1,length=binsize+1)
       
       # Create bin containers
-      bins<-vector()
+      bins <- vector()
       
       # Sort values into correct bin range
       for (i in 2:(binsize+1)){
         rangeBucket <- scaledColumn[(scaledColumn<=cutpoints[i])&(scaledColumn>cutpoints[i-1])]
-        bins<-append(bins,length(rangeBucket))
+        bins <- append(bins,length(rangeBucket))
       }
       
       # % Value of the count (i.e. density)
-      bins<-(bins/length(scaledColumn))*100.0
+      bins <- (bins/length(scaledColumn))*100.0
       
       
       # If number of bins with less than 1%, is greater than cutoff
       # then field is determined as DISCREET
       if (length(which(bins<1.0))>cutoff)
-        fieldTypes[field]<-"DISCREET"
+        fieldTypes[field] <- TYPE_DISCREET
       else
-        fieldTypes[field]<-"ORDINAL"
+        fieldTypes[field] <- TYPE_ORDINAL
       
       
-      graphTitle<-"Decision based on cutoff value:"
+      graphTitle <- "Decision based on cutoff value:"
       
       # Histogram
       barplot(bins, main=paste(graphTitle, cutoff, ":", fieldTypes[field]),
@@ -240,9 +223,217 @@ NPREPROCESSING_fieldTypes<-function(dataset, binsize, cutoff){
       
     }else
     {
-      fieldTypes[field]<-"SYMBOLIC"
+      fieldTypes[field] <- TYPE_SYMBOLIC
     }
   } 
   return(fieldTypes)
 }
+
+
+
+
+
+
+# ************************************************
+# NPREPROCESSING_categorical() :
+#
+# Transform SYMBOLIC or DISCREET fields using 1-hot-encoding
+#
+# INPUT: data frame    - dataset      - symbolic fields
+#        vector string - fieldTypes  - types per field {ORDINAL, SYMBOLIC, DISCREET}
+#
+# OUTPUT : data frame    - transformed dataset
+# ************************************************
+# Small number of literals only otherwise too many dimensions
+# Uses 1-hot-encoding if more than 2 unique literals in the field
+# Otherwise converts the 2 literals into one field of {0,1}
+# ************************************************
+NPREPROCESSING_categorical<-function(dataset, fieldTypes){
+  
+  # Dataframe of the transformed categorical fields
+  # Create one column and fill with rowcount with NA
+  categorical<-data.frame(first=rep(NA, nrow(dataset)), stringsAsFactors=FALSE)
+  
+  for(field in 1:(ncol(dataset))){
+    
+    # Only for SYMBOLIC or DISCREET fields (NEED TO SOLVE WHAT TO DO WITH DISCREET BUCKETTING)
+    # if ((fieldTypes[field]==TYPE_SYMBOLIC)||(fieldTypes[field]==TYPE_DISCREET)) {
+    if (fieldTypes[field]==TYPE_SYMBOLIC) {
+      
+      # Create a list of unique values in the field (each is a literal)
+      literals <- as.vector(unique(dataset[,field]))
+      numberLiterals <- length(literals)
+      
+      # If just two literals in the field, convert to 0 and 1
+      if (numberLiterals==2){
+        transformed <- ifelse (dataset[,field]==literals[1],0.0,1.0)
+        categorical <- cbind(categorical,transformed)
+        colnames(categorical)[ncol(categorical)] <- colnames(dataset)[field]
+        
+      } else
+      {
+        # 1-hot encoding FOR SMALL NUMBER of literals(set max limit)
+        if (numberLiterals<=MAX_LITERALS){
+          for(num in 1:numberLiterals){
+            nameOfLiteral<-literals[num]
+            hotEncoding<-ifelse (dataset[,field]==nameOfLiteral,1.0,0.0)
+            
+            # Warning - do not convert the field if their are too few literals
+            # Use log of number of recrods as the measure
+            literalsActive<-sum(hotEncoding==1)
+            if (literalsActive>log(length(hotEncoding))) {
+              categorical<-cbind(categorical,hotEncoding)
+              
+              # Field name has the "_" seperator to make easier to read
+              colnames(categorical)[ncol(categorical)]<-paste(colnames(dataset)[field],
+                                                              "_",
+                                                              nameOfLiteral,
+                                                              sep="")
+            }
+            else {
+              print(paste("Ignoring in field:",names(dataset)[field],
+                          "Literal:",nameOfLiteral,
+                          "Too few=",literalsActive))
+            }
+          }
+        } else {
+          stop(paste("Error - too many literals in:",names(dataset)[field], numberLiterals))
+        }
+        
+      }
+    }
+  }
+  
+  # Remove first column full of NA due to creation of empty data frame
+  return(categorical[,-1]) 
+  
+  # write.csv(hello, file="1-hot-encoding-SYMBOLIC.csv")
+}
+
+
+
+
+
+NplotOutliers<-function(sorted,outliers,fieldName){
+  
+  plot(1:length(sorted),sorted,pch=1,xlab="Unique records",ylab=paste("Sorted values",fieldName),bty="n")
+  if (length(outliers)>0)
+    points(outliers,sorted[outliers],col="red",pch=19)
+}
+
+
+
+# CUTOFF_OUTLIER <- 0.99
+
+# ************************************************
+# Test if any ordinals are outliers and replace with mean values
+# Null hyposis is there are no outliers
+# We reject this if the p-value<significance (i.e. 0.05), confidence=95%
+
+NPREPROCESSING_outlier<-function(ordinals,confidence){
+  
+  for(field in 1:(ncol(ordinals))){
+    
+    sorted <- unique(sort(ordinals[,field],decreasing=TRUE))
+    
+    outliers <- which(outliers::scores(sorted,type="chisq",prob=abs(confidence)))
+    
+    NplotOutliers(sorted,outliers,colnames(ordinals)[field])
+    
+    # If found records with outlier values
+    if ((length(outliers>0))){
+      
+      # If confidence is positive then replace values with their means, otherwise do nothing
+      if (confidence>0){
+        outliersGone<-rm.outlier(ordinals[,field],fill=TRUE)
+        
+        # sorted<-unique(sort(outliersGone,decreasing=TRUE))
+        
+        # NplotOutliers(sorted,vector(),colnames(ordinals)[field])
+        ordinals[,field]<-outliersGone #Put in the values with the outliers replaced by means
+        print(paste("Outlier field=",names(ordinals)[field],"Records=",length(outliers),"Replaced with MEAN"))
+      } else {
+        print(paste("Outlier field=",names(ordinals)[field],"Records=",length(outliers)))
+      }
+    }
+    
+  }
+  return(ordinals)
+}
+
+
+
+Nrescaleentireframe<-function(dataset){
+  
+  scaled<-sapply(as.data.frame(dataset),Nrescale)
+  return(scaled)
+}
+
+
+
+
+
+
+
+
+NPREPROCESSING_redundantFields<-function(dataset,cutoff){
+  
+  print(paste("Before redundancy check Fields=",ncol(dataset)))
+  
+  #Remove any fields that have a stdev of zero (i.e. they are all the same)
+  xx<-which(apply(dataset, 2, function(x) sd(x, na.rm=TRUE))==0)+1
+  
+  if (length(xx)>0L)
+    dataset<-dataset[,-xx]
+  
+  #Kendall is more robust for data do not necessarily come from a bivariate normal distribution.
+  cr<-cor(dataset, use="everything")
+  #cr[(which(cr<0))]<-0 #Positive correlation coefficients only
+  NPLOT_correlagram(cr)
+  
+  correlated<-which(abs(cr)>=cutoff,arr.ind = TRUE)
+  list_fields_correlated<-correlated[which(correlated[,1]!=correlated[,2]),]
+  
+  if (length(list_fields_correlated)>0){
+    
+    print("Following fields are correlated")
+    print(list_fields_correlated)
+    
+    #We have to check if one of these fields is correlated with another as cant remove both!
+    v<-vector()
+    numc<-nrow(list_fields_correlated)
+    for (i in 1:numc){
+      if (length(which(list_fields_correlated[i,1]==list_fields_correlated[i:numc,2]))==0) {
+        v<-append(v,list_fields_correlated[i,1])
+      }
+    }
+    print("Removing the following fields")
+    print(names(dataset)[v])
+    
+    return(dataset[,-v]) #Remove the first field that is correlated with another
+  }
+  return(dataset)
+}
+
+
+
+
+NPLOT_correlagram<-function(cr){
+  
+  #Defines the colour range
+  col<-colorRampPalette(c("green", "red"))
+  
+  #To fir on screen, convert field names to a numeric
+  rownames(cr)<-1:length(rownames(cr))
+  colnames(cr)<-rownames(cr)
+  
+  corrplot::corrplot(abs(cr),method="square",
+                     order="FPC",
+                     cl.ratio=0.2,
+                     cl.align="r",
+                     tl.cex = 0.6,cl.cex = 0.6,
+                     cl.lim = c(0, 1),
+                     mar=c(1,1,1,1),bty="n")
+}
+
 

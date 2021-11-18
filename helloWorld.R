@@ -21,11 +21,23 @@ rm(list=ls())
 
 # Global Environment variables
 DATASET_FILENAME <- "Washington_State_HDMA-2016.csv"
-FIELDS_TO_REMOVE <- c(2, 10, 11, 24:26, 29:32, 36, 39:42, 45)
 
+# 13 = respondent_id (had 753 categories)
+FIELDS_TO_REMOVE <- c(2, 8, 10, 11, 12, 13, 22, 23, 24:26, 29:32, 35, 36, 37, 39:42, 45)
 
+BINSIZE = 10
+CUTOFF = 5
 
+CUTOFF_OUTLIER <- 0.99
 
+TYPE_SYMBOLIC <- "SYMBOLIC"
+TYPE_DISCREET <- "DISCREET"
+TYPE_ORDINAL  <- "ORDINAL"
+
+# Maximum number of 1-hot-coding new fields
+MAX_LITERALS <- 50                 
+
+scaleFlag <- TRUE
 
 # !!! CHANGE THIS WHEN WE KNOW WHAT WE NEED
 # Define and Load libraries
@@ -63,28 +75,31 @@ MYLIBRARIES<-c("outliers",
 # 2. determine type of fields (NUMERIC or SYMBOLIC) [DONE]
 #
 # NUMERIC: 
-#   a. determine if ORDINAL or DISCRETE
+#   a. determine if ORDINAL or DISCRETE [DONE]
+
 #   b. determine if any ORDINAL fields are outliers
 #      replace outlier value with mean of the field
 #   c. transform dataset using z-scale
-#   d. ensure dataset is scaled to values classifer requires [0.0, 1.0]
+
+#   d. ensure dataset is scaled to values classifer requires [0.0, 1.0] (use the Nrescale)
 #
 # SYMBOLIC:
-#   a. transform using 1-hot-encoding (its own field, with values {0,1})
-#
-# 3. Reduce dimensionality: 
+#   a. transform using 1-hot-encoding (its own field, with values {0,1}) [DONE ish]
+
+
+
+# (create a single dataset?)
+
+
+# (have done it with the removal already?)
+# 3. Reduce dimensionality:
 #       determine if any fields are redundant using correlation
 #       remove fields that are strongly correlated (do not provide extra info)
 #    
-# 4. Split dataset into training and testing
-#
-#
+# 
+# A. randomize dataset
+# B. split dataset into training and testing 
 # (The data is now prepared for training a classifier) 
-
-
-
-
-
 
 
 
@@ -111,12 +126,43 @@ main<-function(){
   
   dataset <- NcleanDataset(dataset, FIELDS_TO_REMOVE)
   
-  # MODIFICATION to be done:
-  #   column for ORDINAL or DISCRETE 
-  #   create csv file with all the categories DONE
   NPREPROCESSING_presentDataset(dataset)
   
-  fieldTypes = NPREPROCESSING_fieldTypes(dataset, 10, 5)
+  # need to bucket the discrete ones into a category 
+  fieldTypes <- NPREPROCESSING_fieldTypes(dataset, BINSIZE, CUTOFF)
+  
+  
+  ordinals <- dataset[,which(fieldTypes=="ORDINAL"),drop=FALSE]
+  ordinals <- NPREPROCESSING_outlier(ordinals, CUTOFF_OUTLIER)
+  
+  
+  if (scaleFlag==TRUE){
+    # ************************************************
+    # Now z-scale
+    zscaled<-apply(ordinals, MARGIN = 2,
+                   FUN = function(X) (scale(X,center=TRUE,
+                                            scale=TRUE)))
+    
+    # ************************************************
+    # Scale in this case to be [0.0,1.0]
+    ordinalReadyforML<-Nrescaleentireframe(as.data.frame(zscaled))
+    
+  } else
+  {
+    ordinalReadyforML<-ordinals
+  }
+  
+  
+  
+  # at the moment only for SYMBOLIC
+  categoricalReadyforML <- NPREPROCESSING_categorical(dataset, fieldTypes)
+  
+  
+  # combinedML (join the 2 dataframes)
+  combinedML<-cbind(ordinalReadyforML,categoricalReadyforML)
+  
+  
+  combinedML<-NPREPROCESSING_redundantFields(dataset=combinedML,cutoff=CUTOFF_REDUNDANT)
   
   print("END of MAIN")
   
