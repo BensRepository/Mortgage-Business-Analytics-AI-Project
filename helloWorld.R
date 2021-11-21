@@ -23,10 +23,13 @@ rm(list=ls())
 DATASET_FILENAME <- "Washington_State_HDMA-2016.csv"
 
 # 13 = respondent_id (had 753 categories)
-FIELDS_TO_REMOVE <- c(2, 10, 11, 13, 24:26, 29:32, 36, 39:42, 45)
+FIELDS_TO_REMOVE <- c(2, 8, 10, 11, 12, 13, 22, 23, 24:26, 29:32, 35, 36, 37, 39:42, 45)
 
-BINSIZE = 10
-CUTOFF = 5
+BINSIZE = 20
+CUTOFF = 20
+
+CUTOFF_OUTLIER <- 0.99
+CUTOFF_REDUNDANT <- 0.95
 
 TYPE_SYMBOLIC <- "SYMBOLIC"
 TYPE_DISCREET <- "DISCREET"
@@ -35,6 +38,33 @@ TYPE_ORDINAL  <- "ORDINAL"
 # Maximum number of 1-hot-coding new fields
 MAX_LITERALS <- 50                 
 
+scaleFlag <- TRUE
+
+HOLDOUT <- 70
+
+OUTPUT_FIELD <- "action_taken_name"
+
+
+PDF_FILENAME      <- "tree.pdf"           # Name of PDF with graphical tree diagram
+RULES_FILENAME    <- "rules.txt"          # Name of text file with rules saved
+RESULTS_FILENAME  <- "results.csv"        # Name of the CSV results file
+NODE_LEVEL        <- 1                    # The number is the node level of the tree to print
+BOOST             <- 20                   # Number of boosting iterations. 1=single model
+FOREST_SIZE       <- 10                 # Number of trees in the forest
+SCALE_DATASET     <- TRUE                 # Set to true to scale dataset before ML stage
+
+
+
+
+BASICNN_HIDDEN    <- 10                   # 10 hidden layer neurons
+BASICNN_EPOCHS    <- 100                  # Maximum number of training epocs
+
+
+DEEP_HIDDEN       <- c(5,5)               # Number of neurons in each layer
+DEEP_STOPPING     <- 2                    # Number of times no improvement before stop
+DEEP_TOLERANCE    <- 0.01                 # Error threshold
+DEEP_ACTIVATION   <- "TanhWithDropout"    # Non-linear activation function
+DEEP_REPRODUCABLE <- TRUE                 # Set to TRUE to test training is same for each run
 
 
 # !!! CHANGE THIS WHEN WE KNOW WHAT WE NEED
@@ -61,7 +91,17 @@ MYLIBRARIES<-c("outliers",
                "formattable",
                "stats",
                "PerformanceAnalytics",
-               "openxlsx")
+               "openxlsx",
+               
+               
+               "caret",
+               "stringr",
+               "partykit",
+               "C50",
+               "randomForest",
+               "keras",
+               "h2o"
+               )
 
 
 
@@ -127,18 +167,120 @@ main<-function(){
   NPREPROCESSING_presentDataset(dataset)
   
   # need to bucket the discrete ones into a category 
-  fieldTypes = NPREPROCESSING_fieldTypes(dataset, BINSIZE, CUTOFF)
+  fieldTypes <- NPREPROCESSING_fieldTypes(dataset, BINSIZE, CUTOFF)
   
   
+  ordinals <- dataset[,which(fieldTypes=="ORDINAL"),drop=FALSE]
+  ordinals <- NPREPROCESSING_outlier(ordinals, CUTOFF_OUTLIER)
   
-  # ordinalReadyForML = 
+  
+  if (scaleFlag==TRUE){
+    # ************************************************
+    # Now z-scale
+    zscaled<-apply(ordinals, MARGIN = 2,
+                   FUN = function(X) (scale(X,center=TRUE,
+                                            scale=TRUE)))
+    
+    # ************************************************
+    # Scale in this case to be [0.0,1.0]
+    ordinalReadyforML<-Nrescaleentireframe(as.data.frame(zscaled))
+    
+  } else
+  {
+    ordinalReadyforML<-ordinals
+  }
+  
   
   
   # at the moment only for SYMBOLIC
-  catagoricalReadyForML = NPREPROCESSING_categorical(dataset, filedTypes)
+  categoricalReadyforML <- NPREPROCESSING_categorical(dataset, fieldTypes)
   
   
   # combinedML (join the 2 dataframes)
+  combinedML<-cbind(ordinalReadyforML,categoricalReadyforML)
+  
+  
+  combinedML<-NPREPROCESSING_redundantFields(dataset=combinedML,cutoff=CUTOFF_REDUNDANT)
+  
+  
+  print(paste("Fields=",ncol(combinedML)))
+  names(combinedML)<-gsub(" ", "", names(combinedML), fixed = TRUE)
+  
+  
+  original <- NPREPROCESSING_splitdataset(combinedML)
+  # myModelling(original$train, original$test)
+  
+  
+  
+  
+  
+  #########################################################
+  
+
+  original1<-NConvertClass(combinedML)
+  
+  # ************************************************
+  # Without any pre-processing of the dataset
+  # Decision trees are good for this!
+  original1<-NPREPROCESSING_splitdataset(original1)
+  
+  measures<-simpleDT(original1$train,original1$test)
+  
+  # Create a data frame to compare results from different experiments
+  allResults<-data.frame(DT_raw=unlist(measures))
+  
+  
+  
+#############################################################
+  
+  
+  # Try a random forest model
+  measures<-randomForest(train=original$train, test=original$test)
+  # measures<-runExperiment(dataset = dataset,FUN = randomForest)
+  
+  # Keep a note of all our results - append to the all results
+  allResults<-cbind(allResults,data.frame(RandomForest=unlist(measures)))
+  
+  
+  
+  
+ ################################################################### 
+  
+  
+  # Now a MLP neural network
+  measures<-mlpNeural(train=original$train, test=original$test)
+  
+  # Keep a note of all our results - append to the all results
+  allResults<-cbind(allResults,data.frame(MLP=unlist(measures)))
+  
+  
+  
+  
+  
+  
+  # ************************************************
+  # Now a deep neural network
+  measures<-deepNeural(train=original$train, test=original$test)
+  
+  # Keep a note of all our results - append to the all results
+  allResults<-cbind(allResults,data.frame(Deep_Neural=unlist(measures)))
+  
+  
+  
+  
+  
+  
+  
+  allResults<-data.frame(t(allResults))
+  
+  # Sort by highest MCC
+  allResults<-allResults[order(allResults$MCC,decreasing = TRUE),]
+  
+  # Output results to compare all classifiers
+  print(formattable::formattable(allResults))
+  
+  # Write frame to a CSV files
+  write.csv(allResults,file=RESULTS_FILENAME)
   
   print("END of MAIN")
   
@@ -160,6 +302,8 @@ pacman::p_load(char=MYLIBRARIES,install=TRUE,character.only=TRUE)
 
 
 # Load additional R scripts
+
+
 source("helloWorldFunctions.R")
 
 set.seed(123)
