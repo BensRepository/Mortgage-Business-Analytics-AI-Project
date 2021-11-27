@@ -127,12 +127,13 @@ main<-function(){
   results <- cbind(results, data.frame(RandomForest=unlist(measures)))
   
   
-  title <- paste("MLP Neural Network with:", BASICNN_HIDDEN, "layers")
+  title <- paste("MLP Neural Network with:", BASICNN_HIDDEN, "neurons")
   neuralNetwork <- NtrainNeuralNetworks(trainingDataset, OUTPUT_FIELD, BASICNN_HIDDEN)
   NimportanceOfInput(neuralNetwork, title, "neuralNetwork")
 
   measures <- Nevaluate(neuralNetwork, testingDataset, OUTPUT_FIELD, "neuralNetwork", title)
   results <- cbind(results, data.frame(MLPNeuralNetwork=unlist(measures)))
+  NPLOTandSummary(neuralNetwork, title)
 
 
   title <- paste("Deep Neural Network with:", DEEPNN_HIDDEN[1], "neurons per", DEEPNN_HIDDEN[2], "layer")
@@ -141,6 +142,7 @@ main<-function(){
 
   measures <- Nevaluate(neuralNetwork, testingDataset, OUTPUT_FIELD, "neuralNetwork", title)
   results <- cbind(results, data.frame(DeepNeuralNetwork=unlist(measures)))
+  NPLOTandSummary(neuralNetwork, title)
   
   # Comparing classifiers and saving to CSV file
   print(formattable::formattable(results))

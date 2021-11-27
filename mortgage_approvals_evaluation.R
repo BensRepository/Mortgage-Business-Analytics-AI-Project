@@ -16,15 +16,6 @@
 # 1.00      29/11/2021    Initial Version
 # ************************************************
 
-# Global Environment variables
-
-
-# fix method for  
-# plot(mlp_classifier,   metric="classification_error")
-# plot(deep_classifier)  # scoring history
-# summary(deep_classifier)
-
-
 
 # ************************************************
 # NimportanceOfInput() :
@@ -299,5 +290,22 @@ Nevaluate<-function(classifier, testingDataset, outputField, model=NA, title){
   results$threshold <- threshold
   
   return(results)
+}
+
+
+# ************************************************
+# NPLOTandSummary() :
+#
+# Plot and Summary for Neural Networks
+#
+# INPUT    : object         - classifier       - Training classifier
+#            character      - title            - Title of classifier
+#
+# OUTPUT   : None                              - None
+# ************************************************
+NPLOTandSummary<-function(classifier, title){
+  
+  summary(classifier)
+  plot(classifier, sub=title)
 }
 
