@@ -32,7 +32,6 @@ RESULTS_FILENAME <- "results.csv"
 # openxlsx               4.2.4
 # outliers                0.14
 # C50                    0.1.5
-# stringr                1.4.0
 # randomForest          4.6-14
 # pROC                  1.18.0
 
@@ -42,7 +41,6 @@ MYLIBRARIES<-c("formattable",
                "openxlsx",
                "outliers",
                "C50",
-               "stringr",
                "randomForest",
                "pROC")
 
@@ -92,7 +90,7 @@ main<-function(){
   NprintRecordAndFieldCount(combinedML)
   
   # Remove redundant fields based on Linear Correlation
-  NPLOT_correlationMatrix(combinedML)
+  NPLOTcorrelationMatrix(combinedML)
   combinedML <- NPREPROCESSING_redundantFields(combinedML, CUTOFF_REDUNDANT)  
   NprintRecordAndFieldCount(combinedML)
   
@@ -116,9 +114,8 @@ main<-function(){
   title <- paste("Decision Tree C5.0 with boost:", BOOST)
   tree <- NtrainDecisionTree(trainingDataset, BOOST)
   NimportanceOfInput(tree, title, "decisionTree")
-  # NDT5RuleOutput(tree)
 
-  measures <- NEvaluation(tree, testingDataset, OUTPUT_FIELD, "tree", title)
+  measures <- Nevaluate(tree, testingDataset, OUTPUT_FIELD, "tree", title)
   results <- data.frame(DecisionTree=unlist(measures))
 
 
@@ -126,23 +123,23 @@ main<-function(){
   tree <- NtrainRandomForest(trainingDataset, FOREST_SIZE)
   NimportanceOfInput(tree, title, "randomForest")
 
-  measures <- NEvaluation(tree, testingDataset, OUTPUT_FIELD, "tree", title)
+  measures <- Nevaluate(tree, testingDataset, OUTPUT_FIELD, "tree", title)
   results <- cbind(results, data.frame(RandomForest=unlist(measures)))
   
   
   title <- paste("MLP Neural Network with:", BASICNN_HIDDEN, "layers")
   neuralNetwork <- NtrainNeuralNetworks(trainingDataset, OUTPUT_FIELD, BASICNN_HIDDEN)
   NimportanceOfInput(neuralNetwork, title, "neuralNetwork")
-  
-  measures <- NEvaluation(neuralNetwork, testingDataset, OUTPUT_FIELD, "neuralNetwork", title)
+
+  measures <- Nevaluate(neuralNetwork, testingDataset, OUTPUT_FIELD, "neuralNetwork", title)
   results <- cbind(results, data.frame(MLPNeuralNetwork=unlist(measures)))
-  
-  
+
+
   title <- paste("Deep Neural Network with:", DEEPNN_HIDDEN[1], "neurons per", DEEPNN_HIDDEN[2], "layer")
   neuralNetwork <- NtrainNeuralNetworks(trainingDataset, OUTPUT_FIELD, DEEPNN_HIDDEN)
   NimportanceOfInput(neuralNetwork, title, "neuralNetwork")
-  
-  measures <- NEvaluation(neuralNetwork, testingDataset, OUTPUT_FIELD, "neuralNetwork", title)
+
+  measures <- Nevaluate(neuralNetwork, testingDataset, OUTPUT_FIELD, "neuralNetwork", title)
   results <- cbind(results, data.frame(DeepNeuralNetwork=unlist(measures)))
   
   # Comparing classifiers and saving to CSV file

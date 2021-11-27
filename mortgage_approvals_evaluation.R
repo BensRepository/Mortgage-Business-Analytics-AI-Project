@@ -84,23 +84,22 @@ NimportanceOfInput<-function(classifier, title, model=NA){
 
 
 # ************************************************
-# NEvaluation() :
+# NtestPredictOutput() :
 #
-# Produce evaluation plots and metrics for classifier
+# Predict the output of the input from the testing dataset
 #
 # INPUT    : object         - classifer        - Training classifier
 #            data Frame     - testingDataset   - Testing dataset to evaluate
 #            character      - outputField      - Name of output field
 #            character      - model            - Type of model
-#            character      - title            - Title of classifier
 #
-# OUTPUT   : list           - measures         - Named evaluation measures
+# OUTPUT   : vector         - testPredict      - Vector of probability from class 1
 #
 # Requires library: h2o
 #
 # Reference: Code obtained from LAB 4
 # ************************************************
-NEvaluation<-function(classifier, testingDataset, outputField, model=NA, title){
+NtestPredictOutput<-function(classifier, testingDataset, outputField, model=NA){
   
   # Probabilities for class 1
   if (!is.na(model)){
@@ -109,7 +108,6 @@ NEvaluation<-function(classifier, testingDataset, outputField, model=NA, title){
       
       testPredicted <- predict(classifier, testingDataset$INPUT, type="prob")
       testPredicted <- testPredicted[,2]
-      testExpected  <- testingDataset$OUTPUT
       
     }
     
@@ -121,229 +119,81 @@ NEvaluation<-function(classifier, testingDataset, outputField, model=NA, title){
       
       testPredicted <- h2o::h2o.predict(classifier, test_h2o)
       testPredicted <- as.vector(testPredicted$p1)
-      testExpected  <- testingDataset$OUTPUT
     
     }
     
-    measures <- NdetermineThreshold(test_predicted=testPredicted,
-                                    test_expected =testExpected,
-                                    plot=TRUE,
-                                    title=title)
-    
-    return(measures)
+    return(testPredicted)
     
   }
 }
 
 
-
-
-
-
-
-# HAVE NOT LOOKED AT CODE ABOVE YET
-
-
 # ************************************************
-# NEvaluateClassifier() :
+# NPLOTROC() :
 #
-# Use dataset to generate predictions from model
-# Evaluate as classifier using threshold value
+# Plots ROC curve from testingdata predictions and returns threshold
 #
-# INPUT   :   vector double     - probs        - probability of being class 1
-#             Data Frame        - testing_data - Dataset to evaluate
-#             double            - threshold     -cutoff (probability) for classification
+# INPUT    : vector         - testPredicted    - Predicted probbilities
+#            vector         - testExpected     - Expected result
+#            character      - title            - Title for plot
 #
-# OUTPUT  :   List       - Named evaluation measures
-#                        - Predicted class probability
+# OUTPUT   : double         - threshold        - Calculated threshold value
 #
+# Requires library: pROC
+#
+# Reference: Code obtained from LAB 4
 # ************************************************
-NEvaluateClassifier<-function(test_predicted,test_expected,threshold) {
+NPLOTROC<-function(testPredicted, testExpected, title){
   
-  predictedClass<-ifelse(test_predicted<threshold,0,1)
+  roc <- pROC::roc(response=testExpected,
+                   predictor=testPredicted,
+                   plot=TRUE,
+                   auc=TRUE,
+                   auc.polygon=TRUE,
+                   percent=TRUE,
+                   grid=TRUE,
+                   print.auc=TRUE,
+                   main=paste("ROC for Classifier Model",title),
+                   xlab="Specificity (TNR) %",
+                   ylab="Sensitivity (TPR) %")
   
-  results<-NcalcConfusion(expectedClass=test_expected,
-                          predictedClass=predictedClass)
+  # Selects the minimum threshold based on distance
+  # sqrt((1 − sensitivity)^2+ (1 − specificity)^2) 
+  # i.e sqrt( FNR^2 + FPR^2 )
+  analysis<-coords(roc, x="best",transpose = FALSE,
+                   best.method="closest.topleft",
+                   ret=c("threshold",
+                         "specificity",
+                         "sensitivity"))
   
-  return(results)
-} 
-
-
-# ************************************************
-# NdetermineThreshold() :
-#
-# For the range of threholds [0,1] calculate a confusion matrix
-# and classifier metrics.
-# Deterime "best" threshold based on either distance or Youdan
-# Plot threshold chart and ROC chart
-#
-# Plot the results
-#
-# INPUT   :   vector double  - probs        - probability of being class 1
-#         :   Data Frame     - testing_data - dataset to evaluate
-#         :   boolean        - plot         - TRUE=create charts otherwise don't
-#         :   string         - title        - string to plot as the chart title
-#
-# OUTPUT  :   List       - Named evaluation measures
-#                        - Predicted class probability
-#
-# Uses   library(pROC)
-# 241019NRT - added plot flag and title for charts
-# ************************************************
-NdetermineThreshold<-function(test_predicted,
-                              test_expected,
-                              plot=TRUE,
-                              title=""){
+  # Add crossing lines
+  abline(h=analysis["sensitivity"], col="blue",lty=3,lwd=2)
+  abline(v=analysis["specificity"], col="blue",lty=3,lwd=2)
   
-  # Helper local scope function
-  getFirst<-function(values){
-    if (length(values)>1){
-      return(values[1])
-    } else
-      return(values)
-  }
+  # Precentage values
+  annotate <- paste("Threshold: ",round(analysis["threshold"],digits=4L),
+                    " TPR %: ", round(analysis["sensitivity"],digits=2L),
+                    " TNR %: ", round(analysis["specificity"],digits=2L), sep="")
   
-  toPlot<-data.frame()
+  text(x=analysis["specificity"],
+       y=analysis["sensitivity"], adj = c(-0.2,2), cex=1,
+       col="blue", annotate)
   
-  #Vary the threshold
-  for(threshold in seq(0,1,by=0.01)){
-    results<-NEvaluateClassifier(test_predicted=test_predicted,
-                                 test_expected=test_expected,
-                                 threshold=threshold)
-    toPlot<-rbind(toPlot,data.frame(x=threshold,fpr=results$FPR,tpr=results$TPR))
-  }
+  return(round(analysis["threshold"], digits=4L)[1,1])
   
-  # the Youden index is the vertical distance between the 45 degree line
-  # and the point on the ROC curve.
-  # Higher values of the Youden index are better than lower values.
-  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5082211/
-  toPlot$youdan<-toPlot$tpr+(1-toPlot$fpr)-1
-  indexToBest<-getFirst(which(toPlot$youdan==max(toPlot$youdan)))
-  maxYoudan<-toPlot$x[indexToBest]
-  
-  # Euclidean distance sqrt((1 − sensitivity)^2+ (1 − specificity)^2)
-  # To the top left (i.e. perfect classifier)
-  toPlot$distance<-sqrt(((100-toPlot$tpr)^2)+((toPlot$fpr)^2))
-  
-  #241019 select just the first min distance, as might be more
-  mindist<-getFirst(toPlot$x[which(toPlot$distance==min(toPlot$distance))])
-  
-  # ************************************************
-  # Plot threshold graph
-  
-  if (plot==TRUE){
-    # Sensitivity (TPR)
-    plot(toPlot$x,toPlot$tpr,
-         xlim=c(0, 1), ylim=c(0, 100),
-         type="l",lwd=3, col="blue",
-         xlab="Threshold",
-         ylab="%Rate",
-         main=paste("Threshold Perfomance Classifier Model",title))
-    
-    # Plot the specificity (1-FPR)
-    lines(toPlot$x,100-toPlot$fpr,type="l",col="red",lwd=3,lty=1)
-    
-    # The point where specificity and sensitivity are the same
-    crosspoint<-toPlot$x[which(toPlot$tpr<(100-toPlot$fpr))[1]]
-    
-    if (!is.na(crosspoint)){
-      if (crosspoint<1)
-        abline(v=crosspoint,col="red",lty=3,lwd=2)
-    }
-    
-    # Plot the Euclidean distance to "perfect" classifier (smallest the best)
-    lines(toPlot$x,toPlot$distance,type="l",col="green",lwd=2,lty=3)
-    
-    # Plot the min distance, as might be more
-    abline(v=mindist,col="green",lty=3,lwd=2)
-    
-    # Youdan (Vertical distance between the 45 degree line and the point on the ROC curve )
-    lines(toPlot$x,toPlot$youdan,type="l",col="purple",lwd=2,lty=3)
-    
-    abline(v=maxYoudan,col="purple",lty=3,lwd=2)
-    
-    legend("bottom",c("TPR","1-FPR","Distance","Youdan"),
-           col=c("blue","red","green","purple"),
-           lty=c(1,1,3,3),
-           lwd=2)
-    
-    text(x=0,y=50, adj = c(-0.2,2),cex=1,
-         col="black",
-         paste("THRESHOLDS:\nDistance=",mindist,"\nYoudan=",maxYoudan))
-    
-    # ************************************************
-    # ROC graph using a library
-    
-    rr<-pROC::roc(response=test_expected,
-                  predictor=test_predicted,
-                  plot=TRUE,
-                  auc=TRUE,
-                  auc.polygon=TRUE,
-                  percent=TRUE,
-                  grid=TRUE,
-                  print.auc=TRUE,
-                  main=paste("ROC for Classifier Model",title),
-                  xlab="Specificity (1-FPR) %",
-                  ylab="Sensitivity (TPR) %")
-    
-    # Selects the "best" threshold based on distance
-    analysis<-coords(rr, x="best",transpose = FALSE,
-                     best.method="closest.topleft",
-                     ret=c("threshold",
-                           "specificity",
-                           "sensitivity"))
-    
-    fpr<-round(100.0-analysis["specificity"],digits=2)
-    
-    #Add crosshairs to the graph
-    abline(h=analysis["sensitivity"],col="red",lty=3,lwd=2)
-    abline(v=analysis["specificity"],col="red",lty=3,lwd=2)
-    
-    #Annote with text
-    annotate<-paste("Threshold: ",round(analysis["threshold"],digits=4L),
-                    " TPR: ",round(analysis["sensitivity"],digits=2L),
-                    "% FPR: ",fpr,"%",sep="")
-    
-    text(x=analysis["specificity"],
-         y=analysis["sensitivity"], adj = c(-0.2,2),cex=1,
-         col="red",annotate)
-    
-  } # endof if plotting
-  
-  # Select the threshold - I have choosen distance
-  
-  myThreshold<-mindist      # Min Distance should be the same as analysis["threshold"]
-  
-  #Use the "best" distance threshold to evaluate classifier
-  results<-NEvaluateClassifier(test_predicted=test_predicted,
-                               test_expected=test_expected,
-                               threshold=myThreshold)
-  
-  results$threshold<-myThreshold
-  
-  return(results)
-} 
-
-
-
-
-
+}
 
 
 # ************************************************
 # NcalcConfusion() :
 #
 # Calculate a confusion matrix for 2-class classifier
-# INPUT: vector - expectedClass  - {0,1}, Expected outcome from each row (labels)
-#        vector - predictedClass - {0,1}, Predicted outcome from each row (labels)
+# 
+# INPUT      : vector - predictedClass - {0,1}, Predicted outcome from each row (labels)
+#              vector - expectedClass  - {0,1}, Expected outcome from each row (labels)
 #
 # OUTPUT: A list with the  entries from NcalcMeasures()
 #
-# 070819NRT convert values to doubles to avoid integers overflowing
-# Updated to the following definition of the confusion matrix
-#
-# A good loan is indicated when $Status=1 and bad when $Status=0
-
 #                    ACTUAL
 #               ------------------
 # PREDICTED     GOOD=1   |  BAD=0
@@ -352,18 +202,16 @@ NdetermineThreshold<-function(test_predicted,
 #               ==================
 #     BAD=0       FN     |    TN
 #
-#
+# Reference: Code obtained from LAB 4
 # ************************************************
-NcalcConfusion<-function(expectedClass,predictedClass){
+NcalcConfusion<-function(predictedClass, expectedClass){
   
-  confusion<-table(factor(predictedClass,levels=0:1),factor(expectedClass,levels=0:1))
+  confusion <- table(factor(predictedClass,levels=0:1),factor(expectedClass,levels=0:1))
   
-  # This "converts" the above into our preferred format
-  
-  TP<-as.double(confusion[2,2])
-  FN<-as.double(confusion[1,2])
-  FP<-as.double(confusion[2,1])
-  TN<-as.double(confusion[1,1])
+  TP <- as.double(confusion[2,2])
+  FN <- as.double(confusion[1,2])
+  FP <- as.double(confusion[2,1])
+  TN <- as.double(confusion[1,1])
   
   return(NcalcMeasures(TP,FN,FP,TN))
   
@@ -373,24 +221,25 @@ NcalcConfusion<-function(expectedClass,predictedClass){
 # ************************************************
 # NcalcMeasures() :
 #
-# Evaluation measures for a confusion matrix
+# Evaluation measures for confusion matrix
 #
-# INPUT: numeric  - TP, FN, FP, TN
+# INPUT  : numeric  - TP, FN, FP, TN
 #
-# OUTPUT: A list with the following entries:
+# OUTPUT : A list with the following entries:
 #        TP        - double - True Positive records
 #        FP        - double - False Positive records
 #        TN        - double - True Negative records
 #        FN        - double - False Negative records
 #        accuracy  - double - accuracy measure
-#        pgood     - double - precision for "good" (values are 1) measure
-#        pbad      - double - precision for "bad" (values are 1) measure
-#        FPR       - double - FPR measure
-#        TPR       - double - FPR measure
+#        pgood     - double - precision for predicted 1s measure
+#        pbad      - double - precision for predicted 0s measure
+#        FPR       - double - FPR measure 
+#        FNR       - double - FNR measure
+#        TPR       - double - FPR measure 
 #        TNR       - double - TNR measure
 #        MCC       - double - Matthew's Correlation Coeficient
 #
-# 080819NRT added TNR measure
+# Reference: Code obtained from LAB 4
 # ************************************************
 NcalcMeasures<-function(TP,FN,FP,TN){
   
@@ -398,14 +247,57 @@ NcalcMeasures<-function(TP,FN,FP,TN){
                   "FN"=FN,
                   "TN"=TN,
                   "FP"=FP,
+                  
                   "accuracy"=100.0*((TP+TN)/(TP+FP+FN+TN)),
+                  
                   "pgood"=   100.0*(TP/(TP+FP)),
                   "pbad"=    100.0*(TN/(FN+TN)),
-                  "FPR"=     100.0*(FP/(FP+TN)),
+
+                  # TPR and FNR are complementary measures
                   "TPR"=     100.0*(TP/(TP+FN)),
+                  "FNR"=     100.0*(FN/(TP+FN)),
+
+                  # TNR and FPR are complementary measures
                   "TNR"=     100.0*(TN/(FP+TN)),
+                  "FPR"=     100.0*(FP/(FP+TN)),
+                  
                   "MCC"=     ((TP*TN)-(FP*FN))/sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))
   )
   return(retList)
+}
+
+
+# ************************************************
+# Nevaluate() :
+#
+# Plots ROC curve from testingdata predictions and returns threshold
+#
+# INPUT    : object         - classifier       - Training classifier
+#            data frame     - testingDataset   - Testing dataset
+#            character      - outputField      - Name of output field
+#            character      - model            - Type of model
+#            character      - title            - Title for plot
+#
+# OUTPUT   : A list with the  entries from NcalcMeasures
+# ************************************************
+Nevaluate<-function(classifier, testingDataset, outputField, model=NA, title){
+  
+  # Predict testing data with classifier
+  testPredicted <- NtestPredictOutput(classifier, testingDataset, outputField, model)
+  testExpected  <- testingDataset$OUTPUT
+  
+  # Plot ROC curve and return the threshold
+  threshold <- NPLOTROC(testPredicted, testExpected, title)
+  
+  # Check if the predicted probability result is above or below threshold
+  testPredicted <- ifelse(testPredicted < threshold, 0, 1)
+  
+  # Calculate measures
+  results <- NcalcConfusion(expectedClass=testExpected,
+                            predictedClass=testPredicted)
+  
+  results$threshold <- threshold
+  
+  return(results)
 }
 

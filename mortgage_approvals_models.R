@@ -19,14 +19,14 @@
 # Global Environment variables
 
 # Trees
-BOOST <- 3
-FOREST_SIZE <- 5
+BOOST <- 5
+FOREST_SIZE <- 10
 
 # Neural Network
 EPOCHS            <- 100                  # Maximum number of training epocs
 
-BASICNN_HIDDEN    <- 10                   # Numbr of hidden layer neurons (MLP)
-DEEPNN_HIDDEN     <- c(5,5)               # Number of neurons in each layer (deep)
+BASICNN_HIDDEN    <- 25                   # Numbr of hidden layer neurons (MLP)
+DEEPNN_HIDDEN     <- c(5,10)              # Number of neurons in each layer (deep)
 
 DEEP_STOPPING     <- 2                    # Number of times no improvement before stop
 DEEP_TOLERANCE    <- 0.01                 # Error threshold
@@ -161,57 +161,5 @@ NtrainNeuralNetworks<-function(trainingDataset, outputField, hiddenLayers){
                                         reproducible = TRUE)
   
   return(neuralNetwork)
-}
-
-
-# HAVE A LOOK AT LATER
-
-# ************************************************
-# DECISION TREE CONVERT DT RULES TO ASCII FORMATTED RULES
-#
-# <anticedent 1> AND <anticedent 2> ...
-# Each anticedent is: [field][comparision][value]
-#
-# INPUT: Object - tree - Trained tree
-#
-# OUTPUT: data frame of rules, class and anticedents
-# ************************************************
-NDT5RuleOutput<-function(tree){
-  #library(stringr)
-  x<-summary(tree)[1]
-  x<-substr(x,regexpr("Rules:",x)[1]+8,nchar(x))
-  x<-substr(x,1,regexpr("Evaluation on training data",x)[1]-1)
-  x<-gsub("[\n\t]", "*", x)
-  df_of_rules<-data.frame(matrix(ncol=3,nrow=tree$size),stringsAsFactors = FALSE)
-  df_of_rules<-setNames(df_of_rules,c("Rule","Class","Anti"))
-  
-  numberofrules<-tree$size
-  # 271019 allow for multiple trees (i.e. boosted)
-  if (length(numberofrules)>1){
-    numberofrules<-numberofrules[1]
-    warning("Prof Nick says: More than one tree found. Extracting rules for just the first")
-  }
-  
-  totalAnticedents<-0
-  for (ruleNumber in 1:numberofrules){
-    start<-regexpr("\\*\\*",x)[1]+2
-    end<-regexpr("->",x)[1]-3
-    onerule<-substr(x,start,end) #Single rule, anticedents seperated by '**'
-    onerule<-gsub("\\*\\*"," AND ",onerule) #Rule now has "AND" between anticedents
-    #onerule<-convertNormalisedDTRuleToRealWorld(onerule)
-    NumAnticedents<-str_count(onerule,"AND")+1
-    totalAnticedents=totalAnticedents+NumAnticedents
-    classpos<-regexpr("class ",x)+6
-    classID<-as.numeric(substr(x,classpos,classpos))  #This has the class of the rule, i.e. {0,1}
-    df_of_rules$Rule[ruleNumber]<-onerule
-    df_of_rules$Class[ruleNumber]<-ifelse(classID==0,"BAD","GOOD") # Convert class to label
-    df_of_rules$Anti[ruleNumber]<-NumAnticedents
-    x<-substr(x,classpos,nchar(x))
-    st<-regexpr("\\*\\*",x)[1]+2 #move past the rule ID
-    x<-substr(x,st,nchar(x))
-  }
-  
-  print(formattable::formattable(df_of_rules))
-  return(df_of_rules)
 }
 

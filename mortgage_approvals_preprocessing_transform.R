@@ -167,7 +167,7 @@ NPREPROCESSING_histogram<-function(dataset, binsize){
       
       # Histogram Plot 
       barplot(bins, main=names(dataset[field]),
-              names.arg = 1:binsize, col="pink ", bty="n")
+              names.arg = 1:binsize, col="light blue", bty="n")
     }
   }
 }
@@ -317,7 +317,7 @@ NcombineDataFrames<-function(dataframe1, dataframe2){
 
 
 # ************************************************
-# correlationMatrix() :
+# NPLOTcorrelationMatrix() :
 #
 # Plots Correlation matrix and saves values in an Excel file
 #
@@ -327,7 +327,7 @@ NcombineDataFrames<-function(dataframe1, dataframe2){
 #
 # Reference: Code obtained from LAB 3
 # ************************************************
-NPLOT_correlationMatrix <- function(dataset){
+NPLOTcorrelationMatrix <- function(dataset){
   
   cr <- cor(dataset, use="everything")
   write.csv(cr, "CorrelationMatrixValues.csv")
@@ -483,10 +483,10 @@ NsplitInputOutput<-function(dataset, outputField){
   
   outputPosition <- which(names(dataset) == outputField)
   
-  # Dataframe with the input fields
+  # Data frame with the input fields
   inputs   <- dataset[-outputPosition]
   
-  # Vector with the expedcted output
+  # Vector with the expected output
   expected <- dataset[ ,outputPosition]
   
   retList <- list("INPUT" =inputs,

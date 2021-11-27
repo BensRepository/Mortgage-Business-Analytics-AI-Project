@@ -293,7 +293,7 @@ NPREPROCESSING_individualEffect<-function(dataset, outputField){
     if (!is.numeric(dataset[,field])) {
       
       stats <- table(dataset[,outputField], dataset[,field])
-      barplot(stats, col=c("light grey","pink"), legend=c("Denied", "Approved"),
+      barplot(stats, col=c("pink","light green"), legend=c("Denied", "Approved"),
               main=names(dataset)[field],
               horiz=T, las=1)
       
